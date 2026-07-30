@@ -1,0 +1,10 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["9YNCQGQ47P.com.rylanloukusa.trove"],
+        "paths": ["/auth/callback", "/share-invite/*"]
+      }
+    ]
+  }
+}
