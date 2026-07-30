@@ -1,0 +1,36 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Trove</title>
+</head>
+<body>
+  <main style="max-width: 560px; margin: 60px auto; padding: 0 20px; font-family: system-ui, sans-serif; line-height: 1.6; text-align: center;">
+    <h1 id="heading">Open this link in Trove</h1>
+    <p id="message">This link is meant to be opened on a device with the Trove app installed.</p>
+    <p id="fallback" style="color: #666; font-size: 14px;"></p>
+  </main>
+
+  <script>
+    var path = window.location.pathname;
+    var heading = document.getElementById("heading");
+    var message = document.getElementById("message");
+    var fallback = document.getElementById("fallback");
+
+    if (path.indexOf("/share-invite/") === 0) {
+      heading.textContent = "Open this invite in Trove";
+      message.textContent = "Someone shared a Trove folder with you. Open this link on your iPhone with Trove installed to accept it.";
+      fallback.textContent = "Don't have Trove yet? It's not available yet, check back soon.";
+    } else if (path.indexOf("/auth/callback") === 0) {
+      heading.textContent = "Continue in Trove";
+      message.textContent = "This sign-in link is meant to be opened on your iPhone with Trove installed.";
+      fallback.textContent = "If Trove didn't open automatically, return to the app and try again.";
+    } else {
+      heading.textContent = "Page not found";
+      message.textContent = "The page you're looking for doesn't exist.";
+      fallback.textContent = "";
+    }
+  </script>
+</body>
+</html>
