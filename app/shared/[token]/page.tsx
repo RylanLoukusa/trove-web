@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import {
   fetchPublicFolder,
   itemSummaryText,
@@ -9,7 +10,8 @@ import {
 } from "@/lib/publicFolder";
 
 type Params = { token: string };
-type Props = { params: Promise<Params> };
+type SearchParams = { folder?: string };
+type Props = { params: Promise<Params>; searchParams: Promise<SearchParams> };
 
 export const generateMetadata = async ({ params }: Props): Promise<Metadata> => {
   const { token } = await params;
@@ -50,6 +52,16 @@ const VideoLockedTile = ({ className }: { className: string }) => (
   </div>
 );
 
+// Matches trove-app's TagChip (src/components/TagChip.tsx) -- visible, not interactive.
+const TagPill = ({ name, color }: { name: string; color?: string | null }) => (
+  <span
+    className="rounded-full border px-4 py-1.5 text-[13px] font-extrabold bg-background"
+    style={{ borderColor: color ?? "var(--border-color)", color: color ?? "var(--accent-dark)" }}
+  >
+    {name}
+  </span>
+);
+
 // Values below (colors, border radius, spacing, font sizes/weights) are copied from
 // trove-app's FolderScreen fullItem* styles (src/screens/FolderScreen/styles.ts) so a
 // shared folder reads as the same design here as it does in the app, not a generic
@@ -75,7 +87,7 @@ const ItemCard = ({ item }: { item: PublicFolderItem }) => {
       )}
 
       {hasStoredMedia && (
-        <div className="flex gap-2.5 overflow-x-auto mt-4">
+        <div className={`flex gap-2.5 overflow-x-auto mt-4 ${displayItems.length === 1 ? "justify-center" : ""}`}>
           {displayItems.map((mediaItem) =>
             mediaItem.mediaType === "video" ? (
               <VideoLockedTile key={mediaItem.id} className="h-[300px] w-[300px] shrink-0" />
@@ -127,52 +139,43 @@ const ItemCard = ({ item }: { item: PublicFolderItem }) => {
           )}
         </div>
       )}
+
+      {item.tags.length > 0 && (
+        <div className="flex flex-wrap gap-2 mt-4">
+          {item.tags.map((tag) => (
+            <TagPill key={tag.id} name={tag.name} color={tag.color} />
+          ))}
+        </div>
+      )}
     </article>
   );
 };
 
 // Matches trove-app's FolderCard (src/components/FolderCard.tsx) visually -- icon, name,
-// item count -- minus the press/chevron affordance, since items are listed inline below
-// rather than navigated into.
-const FolderCard = ({ folder, itemCount }: { folder: PublicFolderSummary; itemCount: number }) => (
-  <div className="flex items-center bg-surface rounded-[18px] p-4 shadow-sm mt-6">
+// item count -- and, like the app, tapping navigates into the subfolder (here via a real
+// ?folder= URL, so the browser back button works the same way a native back gesture would).
+const FolderTile = ({ token, folder, itemCount }: { token: string; folder: PublicFolderSummary; itemCount: number }) => (
+  <Link
+    href={`/shared/${token}?folder=${encodeURIComponent(folder.id)}`}
+    className="flex items-center bg-surface rounded-[18px] p-4 shadow-sm mt-3 hover:opacity-80"
+  >
     <div
       className="flex items-center justify-center rounded-[14px] h-[46px] w-[46px] text-xl shrink-0"
       style={{ backgroundColor: folder.color ?? "var(--border-color)" }}
     >
       {folder.icon ?? "📁"}
     </div>
-    <div className="flex flex-col ml-4">
+    <div className="flex flex-col ml-4 flex-1">
       <span className="text-ink text-[17px] font-extrabold">{folder.name}</span>
       <span className="text-muted text-[13px] mt-0.5">{itemCount} saved here</span>
     </div>
-  </div>
+    <span className="text-muted text-2xl">›</span>
+  </Link>
 );
 
-const FolderSection = ({ data, folderId }: { data: PublicFolderData; folderId: string }) => {
-  const folder = data.folders.find((candidate) => candidate.id === folderId);
-  const items = data.items.filter((item) => item.folderId === folderId);
-  if (!folder) return null;
-  if (folder.id !== data.folder.id && items.length === 0) return null;
-
-  return (
-    <section className="flex flex-col">
-      {folder.id !== data.folder.id && <FolderCard folder={folder} itemCount={items.length} />}
-      {items.length === 0 ? (
-        folder.id === data.folder.id && <p className="text-muted text-sm mt-4">This folder is empty.</p>
-      ) : (
-        <div className="flex flex-col gap-3 mt-4">
-          {items.map((item) => (
-            <ItemCard key={item.id} item={item} />
-          ))}
-        </div>
-      )}
-    </section>
-  );
-};
-
-export default async function SharedFolderPage({ params }: Props) {
+export default async function SharedFolderPage({ params, searchParams }: Props) {
   const { token } = await params;
+  const { folder: folderParam } = await searchParams;
   const result = await fetchPublicFolder(token);
 
   if (!result.data) {
@@ -186,19 +189,55 @@ export default async function SharedFolderPage({ params }: Props) {
     );
   }
 
-  const data = result.data;
+  const data: PublicFolderData = result.data;
+  const activeFolderId = folderParam ?? data.folder.id;
+  const activeFolder = data.folders.find((folder) => folder.id === activeFolderId) ?? data.folder;
+  const parentFolder = activeFolder.parentFolderId
+    ? data.folders.find((folder) => folder.id === activeFolder.parentFolderId)
+    : undefined;
+  const subfolders = data.folders.filter((folder) => folder.parentFolderId === activeFolderId);
+  const folderItems = data.items.filter((item) => item.folderId === activeFolderId);
+  const itemCountByFolderId = new Map<string, number>();
+  data.items.forEach((item) => {
+    itemCountByFolderId.set(item.folderId, (itemCountByFolderId.get(item.folderId) ?? 0) + 1);
+  });
 
   return (
     <main className="flex-1 flex flex-col max-w-xl w-full mx-auto p-6 sm:p-10">
+      {activeFolder.id !== data.folder.id && (
+        <Link
+          href={parentFolder ? `/shared/${token}?folder=${encodeURIComponent(parentFolder.id)}` : `/shared/${token}`}
+          className="text-accent-dark text-sm font-extrabold mb-3"
+        >
+          ‹ Back to {parentFolder?.name ?? data.folder.name}
+        </Link>
+      )}
+
       <span className="text-muted text-[13px] font-bold uppercase tracking-wide">Shared folder</span>
       <h1 className="text-ink text-[26px] font-black mt-1">
-        {data.folder.icon ?? "📁"} {data.folder.name}
+        {activeFolder.icon ?? "📁"} {activeFolder.name}
       </h1>
-      {data.folder.purpose && <p className="text-muted text-[15px] mt-1">{data.folder.purpose}</p>}
+      {activeFolder.purpose && <p className="text-muted text-[15px] mt-1">{activeFolder.purpose}</p>}
 
-      {data.folders.map((folder) => (
-        <FolderSection key={folder.id} data={data} folderId={folder.id} />
-      ))}
+      <h2 className="text-ink text-base font-extrabold mt-6 mb-1">Subfolders</h2>
+      {subfolders.length === 0 ? (
+        <p className="text-muted text-sm">This folder has no subfolders.</p>
+      ) : (
+        subfolders.map((subfolder) => (
+          <FolderTile key={subfolder.id} token={token} folder={subfolder} itemCount={itemCountByFolderId.get(subfolder.id) ?? 0} />
+        ))
+      )}
+
+      <h2 className="text-ink text-base font-extrabold mt-6 mb-1">Items</h2>
+      {folderItems.length === 0 ? (
+        <p className="text-muted text-sm">This folder is empty.</p>
+      ) : (
+        <div className="flex flex-col gap-3">
+          {folderItems.map((item) => (
+            <ItemCard key={item.id} item={item} />
+          ))}
+        </div>
+      )}
 
       <footer className="flex flex-col items-center gap-3 mt-12 pt-8 border-t border-border text-center">
         <p className="text-muted text-sm">Shared read-only via Trove</p>

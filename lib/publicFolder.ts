@@ -34,6 +34,12 @@ export type PublicFolderListItem = {
   indentLevel?: number;
 };
 
+export type PublicFolderTag = {
+  id: string;
+  name: string;
+  color?: string | null;
+};
+
 export type PublicFolderItem = {
   id: string;
   folderId: string;
@@ -49,6 +55,7 @@ export type PublicFolderItem = {
   mediaItems: PublicFolderMediaItem[];
   attachments: PublicFolderAttachment[];
   listItems: PublicFolderListItem[];
+  tags: PublicFolderTag[];
   richText?: string | null;
   createdAt: string;
   updatedAt: string;
